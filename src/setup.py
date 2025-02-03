@@ -50,9 +50,9 @@ def parse_arguments():
     parser.add_argument('-w', '--wells',     action="store",         dest='wells',
                         help='Restrict analysis to wells',                      default='[1-96]',   required=False)
     parser.add_argument('-l', '--loops',     action="store",         dest='loops',
-                        help='Restrict analysis to loop',                       default=None,       required=False)
+                        help='Restrict analysis to indicated loops (Separated by a dot)',                       default=None,       required=False)
     parser.add_argument('-c', '--channels',  action="store",         dest='channels',
-                        help='Restrict analysis to channel',                    default=None,       required=False)
+                        help='Restrict analysis to indicated channel (Separated by a dot)',                    default=None,       required=False)
     parser.add_argument('-f', '--fps',       action="store",         dest='fps',
                         help='Frames per second',                               default=0.0,        required=False,   type=float)
 
@@ -67,14 +67,14 @@ def parse_arguments():
                         help='Should only crop images, not run bpm script',                     required=False)
 
     # Cluster arguments. Index is hidden argument that is set through bash script to assign wells to cluster instances.
-    parser.add_argument('--cluster',        action="store_true",    dest='cluster',
+    parser.add_argument('--cluster',        action="store",    dest='cluster', type=str, choices=['lsf', 'slurm', False], default=False,
                         help='Run analysis on a cluster',                       required=False)
     parser.add_argument('--email',          action="store_true",    dest='email',
                         help='Receive email for cluster notification',          required=False)
     parser.add_argument('-m', '--maxjobs',   action="store",         dest='maxjobs',
                         help='maxjobs on the cluster',          default=None,   required=False)
-    parser.add_argument('-x', '--lsf_index', action="store",         dest='lsf_index',
-                        help=argparse.SUPPRESS,                                 required=False)
+    # parser.add_argument('-x', '--lsf_index', action="store",         dest='lsf_index',
+    #                     help=argparse.SUPPRESS,                                 required=False)
 
     # Debug flag
     parser.add_argument('--debug',          action="store_true",    dest='debug',
@@ -132,5 +132,4 @@ def process_arguments(args, is_cluster_node=False):
         args.channels = {c for c in args.channels.split('.')}
     if args.loops:
         args.loops = {l for l in args.loops.split('.')}
-
     return experiment_id, args
