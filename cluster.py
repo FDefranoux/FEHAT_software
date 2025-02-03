@@ -3,14 +3,14 @@
 #   Sebastian Stricker, Uni Heidelberg, sebastian.stricker@stud.uni-heidelberg.de
 #   Marcio Ferreira,    EMBL-EBI,       marcio@ebi.ac.uk
 # Date: 08/2021
-# License: Contact authors
+# License: GNU GENERAL PUBLIC LICENSE Version 3
 ###
 # Algorithm routine that is exectued when the cluster option is specified. 
 # Deviates slightly from the main file to accomodate the structure of bsub lsf dispatching.
 ###
 ############################################################################################################
 import logging
-import os
+import pathlib
 import sys
 
 import src.io_operations as io_operations
@@ -36,7 +36,7 @@ if __name__ == '__main__':
         channels = list(args.channels)
         loops = list(args.loops)
 
-        tmp_dir = os.path.join(args.outdir, 'tmp')
+        tmp_dir = args.outdir / 'tmp'
 
         if args.lsf_index[0] == '\\':
             # this is for fixing a weird behaviour: the lsf_index comes with a "\" as the first character. The "\" is usefull to pass the parameter, but need to be deleted here.
@@ -69,7 +69,7 @@ if __name__ == '__main__':
 
         out_string = out_string[:-1]
 
-        out_file = os.path.join(tmp_dir, (analysis_id + '.txt'))
+        out_file = tmp_dir / f'{analysis_id}.txt'
         with open(out_file, 'w') as output:
             output.write(out_string)
 

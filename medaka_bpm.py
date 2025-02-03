@@ -4,7 +4,7 @@
 #   Sebastian Stricker, Uni Heidelberg, sebastian.stricker@stud.uni-heidelberg.de
 #   Marcio Ferreira,    EMBL-EBI,       marcio@ebi.ac.uk
 # Date: 08/2021
-# License: Contact authors
+# License: GNU GENERAL PUBLIC LICENSE Version 3
 ###
 # Main program file.
 ###
@@ -12,7 +12,7 @@
 import gc
 
 import logging
-import os
+from pathlib import Path
 import subprocess
 import sys
 
@@ -28,10 +28,10 @@ import src.cropping as cropping
 # QC Analysis modules.
 from qc_analysis.decision_tree.src import analysis as qc_analysis
 
-curr_dir = os.path.dirname(os.path.abspath(__file__))
-
+# Load config
 import configparser
-config_path = os.path.join(curr_dir, 'config.ini')
+curr_dir = Path(__file__).resolve().parent
+config_path = curr_dir / 'config.ini'
 config = configparser.ConfigParser()
 config.read(config_path)
 
@@ -53,7 +53,6 @@ def analyse_directory(args, channels, loops, wells=None):
     trained_tree = io_operations.load_decision_tree()
 
     try:
-        resulting_dict_from_crop = {}
         for well_frame_paths, video_metadata in io_operations.well_video_generator(args.indir, channels, loops):
             
             well_nr = int(video_metadata['well_id'][-3:])
@@ -67,7 +66,7 @@ def analyse_directory(args, channels, loops, wells=None):
             qc_attributes = {}
             
             try:
-                bpm, fps, qc_attributes = analyse_well(well_frame_paths, video_metadata, args, resulting_dict_from_crop)
+                bpm, fps, qc_attributes = analyse_well(well_frame_paths, video_metadata, args)
                 LOGGER.info(f"Reported BPM: {str(bpm)}\n")
                 
                 # Process data.
@@ -100,8 +99,9 @@ def analyse_directory(args, channels, loops, wells=None):
                 well_result['bpm']      = bpm
                 well_result['fps']      = fps
                 well_result['version']  = config['DEFAULT']['VERSION']
-                        
-                results = results.append(well_result, ignore_index=True)
+                
+                well_result = pd.DataFrame(well_result, index=[0])
+                results = pd.concat([results, well_result], ignore_index=True)
 
                 gc.collect()
 
@@ -111,7 +111,7 @@ def analyse_directory(args, channels, loops, wells=None):
     return results
 
 # Run algorithm on a single well
-def analyse_well(well_frame_paths, video_metadata, args, resulting_dict_from_crop):
+def analyse_well(well_frame_paths, video_metadata, args):
     LOGGER.info("Analysing video - "
                 + "Channel: " + str(video_metadata['channel'])
                 + " Loop: " + str(video_metadata['loop'])
@@ -122,47 +122,7 @@ def analyse_well(well_frame_paths, video_metadata, args, resulting_dict_from_cro
     # Load video
     video_metadata['timestamps'] = io_operations.extract_timestamps(well_frame_paths)
 
-    # TODO: Move the cropping out of here. 
-    # This does not overlap with analysis and should therefore be in it's own function
-    # Crop and analyse
-    if args.crop == True and args.crop_and_save == False:
-        LOGGER.info("Cropping images to analyze them, but NOT saving cropped images")
-        # We only need 8 bits video as no images will be saved
-        video8 = io_operations.load_video(well_frame_paths, imread_flag=1)
-
-        # now calculate position based on first 5 frames 8 bits
-        embryo_coordinates = cropping.embryo_detection(video8[0:5])  # get the first 5 frames
-
-        # crop and do not save, just return 8 bits cropped video
-        video, resulting_dict_from_crop = cropping.crop_2(
-            video8, args, embryo_coordinates, resulting_dict_from_crop, video_metadata)
-
-        video = [cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) for frame in video]
-
-        # save panel for crop checking
-        io_operations.save_panel(resulting_dict_from_crop, args)
-
-    elif args.crop_and_save == True:
-        LOGGER.info("Cropping images and saving them...")
-        # first 5 frames to calculate embryo coordinates
-        video8 = io_operations.load_video(well_frame_paths, imread_flag=1, max_frames=5)
-
-        # we need every image as 16 bits to crop based on video8 coordinates
-        video16 = io_operations.load_video(well_frame_paths, imread_flag=-1)
-        embryo_coordinates = cropping.embryo_detection(video8)
-        video_cropped, resulting_dict_from_crop = cropping.crop_2(
-            video16, args, embryo_coordinates, resulting_dict_from_crop, video_metadata)  
-
-        # save cropped images
-        io_operations.save_cropped(video_cropped, args, well_frame_paths)
-
-        # save panel for crop checking
-        io_operations.save_panel(resulting_dict_from_crop, args)
-
-        # now we need every frame in 8bits to run bpm
-        video = io_operations.load_video(well_frame_paths, imread_flag=0)
-    else:
-        video = io_operations.load_video(well_frame_paths, imread_flag=0)
+    video = io_operations.load_video(well_frame_paths, imread_flag=0)
 
     bpm, fps, qc_attributes = segment_heart.run(video, vars(args), video_metadata)
 
@@ -176,7 +136,7 @@ def run_multifolder(args, dirs):
     print("### Directories to be analysed: ")
     # loop throw the folders
     for idx, path in enumerate(dirs):
-        print(str(idx) + ": " + path)
+        print(str(idx) + ": " + str(path))
         # get the indir and outdir arguments on the fly
         args.indir = path
 
@@ -188,7 +148,7 @@ def run_multifolder(args, dirs):
         arguments = sum(arguments_variable, arguments_bool)
 
         # absolute filepath and sys.executeable for windows compatibility
-        filename = os.path.abspath(__file__)
+        filename = str(Path(__file__))
         python_cmd = [sys.executable, filename] + arguments
         cmd_list.append(python_cmd)
 
@@ -204,8 +164,7 @@ def run_multifolder(args, dirs):
             p = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             procs_list.append(p)
 
-            experiment_name = cmd[cmd.index("--indir")+1]
-            experiment_name = os.path.basename(os.path.normpath(experiment_name))
+            experiment_name = Path(cmd[cmd.index("--indir")+1]).name
             print("Starting " + experiment_name)
             i -= 1
 
@@ -221,7 +180,7 @@ def run_multifolder(args, dirs):
 
 def dispatch_cluster(channels, loops):
         # Run cluster analysis
-        main_directory = os.path.dirname(os.path.abspath(__file__))
+        main_directory = Path(__file__).parent
 
         try:
             job_ids = []
@@ -241,10 +200,10 @@ def dispatch_cluster(channels, loops):
 
                     arguments = sum(arguments_variable, arguments_bool)
 
-                    exe_path = os.path.join(main_directory, 'cluster.py')
+                    exe_path = main_directory / 'cluster.py'
 
                     # pass arguments down. Add Jobindex to assign cluster instances to specific wells.
-                    python_cmd = ['python3', exe_path] + arguments + ['-x', '\$LSB_JOBINDEX']
+                    python_cmd = ['python3', str(exe_path)] + arguments + ['-x', r'\$LSB_JOBINDEX']
 
                     jobname = 'heartRate' + args.wells + str(args.maxjobs)
 
@@ -252,11 +211,9 @@ def dispatch_cluster(channels, loops):
 
                     if args.email == False:
                         if args.debug:
-                            outfile = os.path.join(
-                                args.outdir, 'bsub_out/', r'%J_%I-outfile.log')
-                            os.makedirs(os.path.join(
-                                args.outdir, 'bsub_out/'), exist_ok=True)
-                            bsub_cmd += ['-o', outfile]
+                            outfile = args.outdir / 'bsub_out/' / r'%J_%I-outfile.log'
+                            outfile.parent.mkdir(parents=True, exist_ok=True)
+                            bsub_cmd += ['-o', str(outfile)]
                         else:
                             bsub_cmd += ['-o', '/dev/null']
 
@@ -287,17 +244,16 @@ def dispatch_cluster(channels, loops):
 
             if args.email == False:
                 if args.debug:
-                    outfile = os.path.join(
-                        args.outdir, 'bsub_out/', r'%J_consolidate.log')
-                    os.makedirs(os.path.join(
-                        args.outdir, 'bsub_out/'), exist_ok=True)
+                    outfile = args.outdir / 'bsub_out/' / r'%J_consolidate.log'
+                    outfile.parent.mkdir(parents=True, exist_ok=True)
+                    bsub_cmd += ['-o', str(outfile)]
                     consolidate_cmd += ['-o', outfile]
                 else:
                     consolidate_cmd += ['-o', '/dev/null']
 
-            tmp_dir = os.path.join(args.outdir, 'tmp')
-            exe_path = os.path.join(main_directory, 'src/', 'cluster_consolidate.py')
-            python_cmd = ['python3', exe_path, '-i', tmp_dir, '-o', args.outdir]
+            tmp_dir = args.outdir / 'tmp'
+            exe_path = main_directory / 'src/' / 'cluster_consolidate.py'
+            python_cmd = ['python3', str(exe_path), '-i', str(tmp_dir), '-o', str(args.outdir)]
 
             # consolidate_cmd += ['source', 'activate', 'medaka_env', '&&']  # calling source medaka_env here was throwing a error
             consolidate_cmd += python_cmd
@@ -340,7 +296,7 @@ def main(args):
         LOGGER.info("Running on cluster")
         dispatch_cluster(channels, loops)
 
-    elif args.only_crop == False:
+    elif args.crop == False:
         LOGGER.info("Running on a single machine")
 
         results = analyse_directory(args, channels, loops)
@@ -367,21 +323,22 @@ def main(args):
                         + " Well: " + str(video_metadata['well_id'])
                         )
 
+            embryo_size = int(config["CROPPING"]["EMBRYO_SIZE"])
+            border_ratio = float(config["CROPPING"]["BORDER_RATIO"])
+
             # we only need the first 5 frames to get position averages
             video8 = io_operations.load_video(well_frame_paths, imread_flag=1, max_frames=5)
+            embryo_coordinates = cropping.embryo_detection(video8, embryo_size, border_ratio)
             
             # we need every image as 16 bits to crop based on video8 coordinates
-            video16 = io_operations.load_video(well_frame_paths, imread_flag=-1, max_frames=5)
-            embryo_coordinates = cropping.embryo_detection(video8)
+            video16 = io_operations.load_video(well_frame_paths, imread_flag=-1)
 
-            cropped_video, resulting_dict_from_crop = cropping.crop_2(video16, args, embryo_coordinates, resulting_dict_from_crop, video_metadata)
+            cropped_video, resulting_dict_from_crop = cropping.crop_2(video16, embryo_size, embryo_coordinates, resulting_dict_from_crop, video_metadata)
             # save cropped images
             io_operations.save_cropped(cropped_video, args, well_frame_paths)
             # save panel for crop checking
             io_operations.save_panel(resulting_dict_from_crop, args)
-            # here finish the script as we only need is save the cropped images
 
-# TODO: Workaround to import run_algorithm into cluster.py. Maybe solve more elegantly
 if __name__ == '__main__':
     # Parse input arguments.
     args = setup.parse_arguments()

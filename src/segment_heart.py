@@ -7,7 +7,7 @@
 #   Marcio Ferreira,    EMBL-EBI,       marcio@ebi.ac.uk                            (Current Maintainer)
 #   Sebastian Stricker, Uni Heidelberg, sebastian.stricker@stud.uni-heidelberg.de   (Current Maintainer)
 # Date: 08/2021
-# License: Contact authors
+# License: GNU GENERAL PUBLIC LICENSE Version 3
 ###
 # Algorithms for:
 #   cropping medaka embryo videos from the Acquifier Imaging machine
@@ -17,32 +17,27 @@
 ############################################################################################################
 import math
 from matplotlib import pyplot as plt
-import os
+from pathlib import Path
 import logging
-
-from statistics import mean
 
 import numpy as np
 import cv2
 
 # import skimage
-from skimage.filters import threshold_triangle, threshold_yen
-from skimage.measure import label
-from skimage import color
+from skimage.filters import threshold_triangle
 
 import scipy.stats
 import scipy.interpolate
 from scipy.signal import savgol_filter, detrend 
 
 import matplotlib
-from mpl_toolkits.mplot3d import axes3d
 matplotlib.use('Agg')
 
 # Read config
 import configparser
 
-parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-config_path = os.path.join(parent_dir, 'config.ini')
+parent_dir = Path(__file__).resolve().parents[1]
+config_path = parent_dir / 'config.ini'
 
 config = configparser.ConfigParser()
 config.read(config_path)
@@ -75,7 +70,7 @@ def save_video(video, fps, outdir, filename):
     except (IndexError, ValueError):
         height, width = video[0].shape
     size = (width, height)
-    out_vid = os.path.join(outdir, filename)
+    out_vid = outdir / filename
     out = cv2.VideoWriter(out_vid, fourcc, fps, size)
 
     for i in range(len(video)):
@@ -113,7 +108,6 @@ def plot_frequencies_2d(amplitudes, bins, outdir):
         Plots amplitudes for each frequency on x axis, pixels on y axis.
         2D plot of frequencies detected in the region.
     """
-
     # Ensures parameters are numpy arrays - meshgrid function works
     amplitudes = np.array(amplitudes)
     bins = np.array(bins)
@@ -131,7 +125,7 @@ def plot_frequencies_2d(amplitudes, bins, outdir):
     ax.set_ylabel('pixel')
     ax.set_zlabel('frequency amplitude')
 
-    out_fig = os.path.join(outdir, "fourier_signals_3D.png")
+    out_fig = outdir / "fourier_signals_3D.png"
     plt.savefig(out_fig, bbox_inches='tight')
 
     plt.close()
@@ -149,7 +143,7 @@ def plot_frequencies_2d(amplitudes, bins, outdir):
     ax.set_ylabel('pixel')
     fig.colorbar(c, ax=ax)
 
-    out_fig = os.path.join(outdir, "fourier_signals_heatmap.png")
+    out_fig = outdir / "fourier_signals_heatmap.png"
     plt.savefig(out_fig, bbox_inches='tight')
 
     plt.close()
@@ -187,7 +181,7 @@ def analyse_frequencies(amplitudes, freqs):
     highest_freqs = [freqs[idx] for idx in max_indices]
     
     # Take frequency that is most often the max
-    max_freq = scipy.stats.mode(highest_freqs).mode[0]
+    max_freq = scipy.stats.mode(highest_freqs).mode
 
     #pick highest frequency
     bpm = round(max_freq * 60)
@@ -529,7 +523,7 @@ def HROI(video, frame2frame_changes, timestamps):
 def save_image(image, name, outdir):
 
     # Prepare outfigure
-    out_fig = os.path.join(outdir, name + ".png")
+    out_fig = outdir / f"{name}.png"
 
     fig, ax = plt.subplots()
 
@@ -545,7 +539,7 @@ def save_image(image, name, outdir):
 def draw_heart_qc_plot(single_frame, abs_changes, all_roi, hroi_mask, out_dir):
 
     # Prepare outfigure
-    out_fig = os.path.join(out_dir, "embryo_heart_roi.png")
+    out_fig = out_dir / "embryo_heart_roi.png"
 
     fig, ax = plt.subplots(2, 2, figsize=(15, 15))
     # First frame
@@ -622,11 +616,8 @@ def run(video, args, video_metadata):
 
     ################################################################################ Setup
     # Add well position to output directory path
-    out_dir = os.path.join( args['outdir'], 
-                            video_metadata['channel'],
-                            video_metadata['loop'] + '-' + video_metadata['well_id'])
-
-    os.makedirs(out_dir, exist_ok=True)
+    out_dir = args['outdir'] / video_metadata['channel'] / f"{video_metadata['loop']}-{video_metadata['well_id']}"
+    out_dir.mkdir(parents=True, exist_ok=True)
 
     # Ensures np array not lists.
     video = np.asarray(video)
@@ -719,9 +710,8 @@ def run(video, args, video_metadata):
     ################################################################################ Fourier Frequency estimation
     LOGGER.info("Fourier frequency evaluation")
     
-    # Run normally, Fourier in segemented area
-    if not args['slowmode']:
-        bpm, qc_data = bpm_from_heartregion(hroi_pixels, timestamps, out_dir)
+    # Run Fourier in segemented area
+    bpm, qc_data = bpm_from_heartregion(hroi_pixels, timestamps, out_dir)
 
     # Add attributes from frequency analysis to dictionary
     qc_attributes.update(qc_data)
