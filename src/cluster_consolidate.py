@@ -15,10 +15,8 @@
 import argparse
 import pandas as pd
 from pathlib import Path
-
-from pathlib import Path
 import logging
-
+import os
 import io_operations
 import setup
 
@@ -26,8 +24,8 @@ LOGGER = logging.getLogger(__name__)
 
 parser = argparse.ArgumentParser(description='Read in medaka heart video frames')
 parser.add_argument('-o','--outdir', action="store", dest='outdir', help='Where to store the output report and the global log',    default=False, required = True)
-parser.add_argument('-i','--indir', action="store", dest='indir', help='Path to temp folder with results',                      default=False, required = True)
-
+parser.add_argument('-i','--indir', action="store", dest='indir', help='Path to temp folder with results', default=False, required = True)
+parser.add_argument('--debug',action="store_true",dest='debug', help='Additional debug output',  required=False)
 args = parser.parse_args()
 
 args.indir  = Path(args.indir)
@@ -36,14 +34,17 @@ args.outdir = Path(args.outdir)
 # Number code for logfile and outfile respectively
 experiment_id = args.outdir.name.split('_')[0]
 
-setup.config_logger(args.outdir, ("logfile_" + experiment_id + ".log"))
+setup.config_logger( os.path.join(str(args.outdir), 'log'), "logfile_consolidate.log", args.debug)
 
 try:
     LOGGER.info("Consolidating cluster results")
 
     # path to central log file
-    logs_paths    = args.indir.glob('*.log')
-    results_paths = args.indir.glob('*.txt')
+    logs_paths    = list((args.indir / 'log').glob('logfile_hrt_bpm*.log'))
+    results_paths = list((args.indir / 'results').glob('*.csv'))
+    
+    LOGGER.debug('{} Logs paths found'.format(len(logs_paths)))
+    LOGGER.debug('{} Results paths found'.format(len(results_paths)))
 
     # log files and results files of one analysis should have same index in lists
     logs_paths.sort()
@@ -74,7 +75,7 @@ try:
 
     # Sort entries for output
     results = pd.DataFrame.from_dict(results)
-    results = results.sort_values(by=['channel', 'loop', 'well_id'])
+    results = results.sort_values(by=['Channel', 'Loop', 'WellID'])
 
     # Consolidate all logs into the general log file
     logs = results['log'].tolist()

@@ -679,6 +679,8 @@ def run(video, args, video_metadata):
 
         # image of pixels considered for the heart region..
         save_image(all_roi*255, "ROI_pixels", out_dir)
+        #TODO: include error message if issue here
+        # qc_attributes["Error"] = 'No ROI for the heart detected'
         return None, fps, qc_attributes
 
     # Output video and region plot for manual quality control.

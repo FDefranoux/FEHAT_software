@@ -13,17 +13,16 @@ import gc
 
 import logging
 from pathlib import Path
-import subprocess
 import sys
-
-import cv2
+import os
+import argparse
 
 import pandas as pd
 
 import src.io_operations as io_operations
 import src.setup as setup
 import src.segment_heart as segment_heart
-import src.cropping as cropping
+from src.job_utils import return_jobindex
 
 # QC Analysis modules.
 from qc_analysis.decision_tree.src import analysis as qc_analysis
@@ -32,28 +31,28 @@ from qc_analysis.decision_tree.src import analysis as qc_analysis
 import configparser
 curr_dir = Path(__file__).resolve().parent
 config_path = curr_dir / 'config.ini'
+curr_dir = Path(__file__).resolve().parent
+config_path = curr_dir / 'config.ini'
 config = configparser.ConfigParser()
 config.read(config_path)
 
 ################################## GLOBAL VARIABLES ###########################
-LOGGER = logging.getLogger(__name__)
+# LOGGER = logging.getLogger(__name__)
 
 ################################## ALGORITHM ##################################
-    
 # Analyse a range of wells
-def analyse_directory(args, channels, loops, wells=None):
-    LOGGER.info("##### Analysis #####")
+def analyse_directory(indir, args, channels, loops, wells=None):
     LOGGER.info("The analysis for each well can take one to several minutes")
-    LOGGER.info("Running....please wait...\n")
+    LOGGER.info("Running....please wait...")
 
     # Results for all wells
     results = pd.DataFrame()
 
     # Get trained model, if present. 
     trained_tree = io_operations.load_decision_tree()
-
+    
     try:
-        for well_frame_paths, video_metadata in io_operations.well_video_generator(args.indir, channels, loops):
+        for well_frame_paths, video_metadata in io_operations.well_video_generator(indir, channels, loops):
             
             well_nr = int(video_metadata['well_id'][-3:])
             if wells is not None and well_nr not in wells:
@@ -67,7 +66,7 @@ def analyse_directory(args, channels, loops, wells=None):
             
             try:
                 bpm, fps, qc_attributes = analyse_well(well_frame_paths, video_metadata, args)
-                LOGGER.info(f"Reported BPM: {str(bpm)}\n")
+                LOGGER.info(f"Reported BPM: {str(bpm)}")
                 
                 # Process data.
                 # Important to rearrange the qc params in the same order used during training.
@@ -107,6 +106,7 @@ def analyse_directory(args, channels, loops, wells=None):
 
     except Exception as e:
         LOGGER.exception("Couldn't finish analysis")
+        sys.exit()
 
     return results
 
@@ -128,232 +128,143 @@ def analyse_well(well_frame_paths, video_metadata, args):
 
     return bpm, fps, qc_attributes
 
-def run_multifolder(args, dirs):
-    # processes to be dispatched
-    cmd_list = []
-    procs_list = []
 
-    print("### Directories to be analysed: ")
-    # loop throw the folders
-    for idx, path in enumerate(dirs):
-        print(str(idx) + ": " + str(path))
-        # get the indir and outdir arguments on the fly
-        args.indir = path
-
-        # get arguments for recursive call
-        arguments_variable = [
-            ['--' + key, str(value)] for key, value in vars(args).items() if value and value is not True]
-        arguments_bool = ['--' + key for key,
-                          value in vars(args).items() if value is True]
-        arguments = sum(arguments_variable, arguments_bool)
-
-        # absolute filepath and sys.executeable for windows compatibility
-        filename = str(Path(__file__))
-        python_cmd = [sys.executable, filename] + arguments
-        cmd_list.append(python_cmd)
-
-    if args.cluster:
-        for cmd in cmd_list:
-            subprocess.run(cmd, stdout=subprocess.DEVNULL,
-                           stderr=subprocess.DEVNULL)
-    else:
-        max_subprocesses = int(config['DEFAULT']['MAX_PARALLEL_DIRS'])
-        print("Processing subfolders " + str(max_subprocesses) + " at a time.")
-        i = max_subprocesses
-        for cmd in cmd_list:
-            p = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            procs_list.append(p)
-
-            experiment_name = Path(cmd[cmd.index("--indir")+1]).name
-            print("Starting " + experiment_name)
-            i -= 1
-
-            if i == 0:
-                for proc in procs_list:
-                    proc.wait()
-                print("Finished process set\n")
-                i = max_subprocesses
-
-        for proc in procs_list:
-            proc.wait()
-        print("\nFinished all subfolders")
-
-def dispatch_cluster(channels, loops):
-        # Run cluster analysis
-        main_directory = Path(__file__).parent
-
-        try:
-            job_ids = []
-            for channel in channels:
-                for loop in loops:
-                    LOGGER.info("Dispatching wells from " + channel + " " + loop + " to cluster")
-
-                    # Prepare arguments to pass to bsub job
-                    args.channels = channel
-                    args.loops = loop
-
-                    arguments_variable = [['--' + key, str(value)] for key, value in vars(args).items() 
-                                            if value and value is not True]
-
-                    arguments_bool = ['--' + key for key, value in vars(args).items() 
-                                            if value is True]
-
-                    arguments = sum(arguments_variable, arguments_bool)
-
-                    exe_path = main_directory / 'cluster.py'
-
-                    # pass arguments down. Add Jobindex to assign cluster instances to specific wells.
-                    python_cmd = ['python3', str(exe_path)] + arguments + ['-x', r'\$LSB_JOBINDEX']
-
-                    jobname = 'heartRate' + args.wells + str(args.maxjobs)
-
-                    bsub_cmd = ['bsub', '-J', jobname, '-M8000', '-R', 'rusage[mem=8000]']
-
-                    if args.email == False:
-                        if args.debug:
-                            outfile = args.outdir / 'bsub_out/' / r'%J_%I-outfile.log'
-                            outfile.parent.mkdir(parents=True, exist_ok=True)
-                            bsub_cmd += ['-o', str(outfile)]
-                        else:
-                            bsub_cmd += ['-o', '/dev/null']
-
-                    cmd = bsub_cmd + python_cmd  # calling source medaka_env was throwing a error
-
-                    # Create a job array for each well
-                    result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-
-                    LOGGER.debug(cmd)
-
-                    stdout_return = result.stdout.decode('utf-8')
-                    LOGGER.info("\n" + stdout_return)
-
-                    # Get jobId for consolidate command later
-                    i1 = stdout_return.find('<') + 1
-                    i2 = stdout_return.find('>')
-                    job_ids.append(stdout_return[i1:i2])
-
-            # Create a dependent job for final report
-            job_ids = [("ended(" + s + ")") for s in job_ids]
-            w_condition = '&&'.join(job_ids)
-
-            # assign unique name.
-            # Target completion of all experiment analysis with ended(HRConsolidate-*).
-            # Needed in test_accuracy when JOB_DEP_LAST_SUB = 1 in lsb.params.
-            unique_job_name = "HRConsolidate-" + str(job_ids[0])
-            consolidate_cmd = ['bsub', '-J', unique_job_name, '-w', w_condition, '-M3000', '-R', 'rusage[mem=3000]']
-
-            if args.email == False:
-                if args.debug:
-                    outfile = args.outdir / 'bsub_out/' / r'%J_consolidate.log'
-                    outfile.parent.mkdir(parents=True, exist_ok=True)
-                    bsub_cmd += ['-o', str(outfile)]
-                    consolidate_cmd += ['-o', outfile]
-                else:
-                    consolidate_cmd += ['-o', '/dev/null']
-
-            tmp_dir = args.outdir / 'tmp'
-            exe_path = main_directory / 'src/' / 'cluster_consolidate.py'
-            python_cmd = ['python3', str(exe_path), '-i', str(tmp_dir), '-o', str(args.outdir)]
-
-            # consolidate_cmd += ['source', 'activate', 'medaka_env', '&&']  # calling source medaka_env here was throwing a error
-            consolidate_cmd += python_cmd
-
-            LOGGER.debug(consolidate_cmd)
-            subprocess.run(consolidate_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
-        except Exception as e:
-            LOGGER.exception("During dispatching of jobs onto the cluster")
-
-def main(args):
+def main(indir, outdir, well_id, loop, channel, args, debug=False):
     ################################## STARTUP SETUP ##################################
-    experiment_id, args = setup.process_arguments(args)
-    setup.config_logger(args.outdir, ("logfile_" + experiment_id + ".log"), args.debug)
-
-    LOGGER.info("Program started with the following arguments: " + str(sys.argv[1:]))
-
+    LOGGER.info("#######################")
+    LOGGER.info("Program started with the following arguments: " + '\t'.join([str(indir), str(outdir), well_id, loop, channel]))
+    analysis_id = '_'.join([well_id, loop, channel]) 
+    
     ################################## MAIN PROGRAM START ##################################
-    LOGGER.info("##### MedakaBPM #####")
-
-    nr_of_videos, channels, loops = io_operations.extract_data(args.indir)
-    if args.channels:
-        channels = list(args.channels.intersection(channels))
-        channels.sort()
-    if args.loops:
-        loops = list(args.loops.intersection(loops))
-        loops.sort()
-
-    if not loops or not channels:
-        LOGGER.error("No loops or channels were found!")
-        sys.exit()
-
-    # Extract Video metadata
-    LOGGER.info("Deduced number of videos: " + str(nr_of_videos))
-    LOGGER.info("Deduced Channels: " + ', '.join(channels))
-    LOGGER.info("Deduced number of Loops: " + str(len(loops)) + "\n")
-
-    ################################## ANALYSIS ##################################
-    if args.cluster:
-        LOGGER.info("Running on cluster")
-        dispatch_cluster(channels, loops)
-
-    elif args.crop == False:
-        LOGGER.info("Running on a single machine")
-
-        results = analyse_directory(args, channels, loops)
+    pattern = '*{}*{}*{}*.tif'.format(well_id, loop, channel)
+    nr_files_for_analysis = list(indir.glob(pattern)) + list(indir.glob(pattern + 'f'))
+    if len(nr_files_for_analysis) <= 0:
+        LOGGER.error("Did not found any files corresponding")
+        LOGGER.debug('Files correponding to following pattern {}: {}'.format(pattern, len(nr_files_for_analysis)))
+        raise Exception('No File Found') 
+    else:
+        LOGGER.info(f'Found {len(nr_files_for_analysis)} for the analysis')
+        LOGGER.debug('Files correponding to following pattern {}: {}'.format(pattern, len(nr_files_for_analysis)))
+        well_nr = int(well_id[-3:])
+        results = analyse_directory(indir, args, [channel], [loop], wells=[well_nr])
 
         ################################## OUTPUT ##################################
-        LOGGER.info("#######################")
+        io_operations.write_to_spreadsheet(Path(outdir / "results"), results, analysis_id)
         LOGGER.info("Finished analysis")
-        nr_of_results = len(results)
-        if (nr_of_videos != nr_of_results):
-            LOGGER.warning("Logic fault. Number of results (" + str(nr_of_results) +
-                           ") doesn't match number of videos detected (" + str(nr_of_videos) + ")")
+    LOGGER.info("#######################\n")
 
-        io_operations.write_to_spreadsheet(args.outdir, results, experiment_id)
-        
-    else:
-        LOGGER.info("Only cropping, script will not run BPM analyses")
-
-        resulting_dict_from_crop = {}
-        for well_frame_paths, video_metadata in io_operations.well_video_generator(args.indir, channels, loops):
-
-            LOGGER.info("Looking at video - "
-                        + "Channel: " + str(video_metadata['channel'])
-                        + " Loop: " + str(video_metadata['loop'])
-                        + " Well: " + str(video_metadata['well_id'])
-                        )
-
-            embryo_size = int(config["CROPPING"]["EMBRYO_SIZE"])
-            border_ratio = float(config["CROPPING"]["BORDER_RATIO"])
-
-            # we only need the first 5 frames to get position averages
-            video8 = io_operations.load_video(well_frame_paths, imread_flag=1, max_frames=5)
-            embryo_coordinates = cropping.embryo_detection(video8, embryo_size, border_ratio)
-            
-            # we need every image as 16 bits to crop based on video8 coordinates
-            video16 = io_operations.load_video(well_frame_paths, imread_flag=-1)
-
-            cropped_video, resulting_dict_from_crop = cropping.crop_2(video16, embryo_size, embryo_coordinates, resulting_dict_from_crop, video_metadata)
-            # save cropped images
-            io_operations.save_cropped(cropped_video, args, well_frame_paths)
-            # save panel for crop checking
-            io_operations.save_panel(resulting_dict_from_crop, args)
 
 if __name__ == '__main__':
+    LOGGER = logging.getLogger(__name__)
+    parser = argparse.ArgumentParser(
+        description='Automated heart rate analysis of Medaka embryo videos')
+    
+    # General analysis arguments
+    parser.add_argument('-i', '--indir',
+                        help='Input directory',
+                        required=True)
+    
+    parser.add_argument('-o', '--outdir',
+                        help='Output directory. Default=indir',
+                        default='.',
+                        required=False)
+    
+    parser.add_argument('-w', '--well_id',
+                        help='Restrict analysis to one well',
+                        default=None,   
+                        required=False)
+    
+    parser.add_argument('-a', '--well_array',
+                        help='Restrict analysis to targeted wells in case of array',
+                        default='[1-96]',   
+                        required=False)    
+
+    parser.add_argument('-l', '--loops',
+                        help='Restrict analysis to loop',
+                        required=True)
+
+    parser.add_argument('-c', '--channels',
+                        help='Restrict analysis to channel',
+                        required=True)
+
+    parser.add_argument('-f', '--fps',
+                        help='Frames per second',
+                        default=0.0,
+                        required=False,
+                        type=float)
+    
+    parser.add_argument('-s', '--embryo_size', 
+                        help='radius of embryo in pixels',
+                        default=300,
+                        required=False, 
+                        type=int)
+
+    parser.add_argument('--cluster',
+                        type=str, 
+                        choices=['lsf', 'slurm', False], 
+                        default=False,
+                        help='Run analysis on a cluster',
+                        required=False)
+    parser.add_argument('--email',
+                        action="store_true",
+                        help='Receive email for cluster notification',
+                        required=False)
+
+    parser.add_argument('-m', '--maxjobs',
+                        action="store",
+                        help='maxjobs on the cluster',
+                        required=False)
+    
+    parser.add_argument('--debug',
+                        action="store_true",
+                        help='Additional debug output',
+                        required=False)
+        
+    args = parser.parse_args()
+
     # Parse input arguments.
-    args = setup.parse_arguments()
-
-    ################# MULTI FOLDER DETECTION ######################
-    # Detect subfolders in indir
-    dir_list = io_operations.detect_experiment_directories(args.indir)
-
-    if len(dir_list) < 1:
-        print("Error: Indirectory invalid")
-        sys.exit(1)
-
-    if len(dir_list) == 1:          # only one directory: process directly
-        args.indir = dir_list.pop()
-        main(args)
-    else:                            # Multidir. Process separately
-        print("Running multifolder mode. Limited console feedback, check logfiles for process status")
-        run_multifolder(args, dir_list)
+    args.indir = Path(args.indir)
+    if args.outdir:
+        args.outdir = Path(args.outdir)
+    _, args = setup.process_arguments(args, is_cluster_node=False) 
+    args.loops =  list(args.loops)[0]
+    args.channels =list(args.channels)[0]
+    
+    if args.well_id:
+        analysis_id = '_'.join([args.well_id, args.loops,  args.channels]) 
+        setup.config_logger(os.path.join(args.outdir, 'log'), ("logfile_hrt_bpm_" + analysis_id + ".log"), args.debug)
+        main(indir=Path(args.indir), outdir=Path(args.outdir), well_id=args.well_id, loop=args.loops, channel=args.channels, debug=args.debug, args=args)
+        sys.exit(0)
+    elif args.well_array:
+        range_wells = args.well_array[1:-1].split('-')
+        well_ls = ['WE000' + str(n) if n > 9 else 'WE0000' + str(n) for n in range(int(range_wells[0]), int(range_wells[1])+1)]
+    else:
+        raise 'Need at least one well to run on'
+    
+    if args.cluster:
+        job_index = return_jobindex()
+    else:
+        job_index = None
+    
+    #Run the jobs according to potential arrays        
+    if job_index != None:
+        well_id = well_ls[job_index -1]
+        analysis_id = '_'.join([well_id, args.loops, args.channels]) 
+        setup.config_logger(os.path.join(args.outdir, 'log'), ("logfile_hrt_bpm_" + analysis_id + ".log"), args.debug)
+        main(indir=Path(args.indir), outdir=Path(args.outdir), well_id=well_id, loop=args.loops, channel=args.channels, debug=args.debug, args=args)
+    
+    elif len(well_ls) == 1:
+        analysis_id = '_'.join([well_ls[0], args.loops, args.channels]) 
+        setup.config_logger(os.path.join(args.outdir, 'log'), ("logfile_hrt_bpm_" + analysis_id + ".log"), args.debug)
+        main(indir=Path(args.indir), outdir=Path(args.outdir), well_id=well_ls[0], loop=args.loops, channel=args.channels, debug=args.debug, args=args)
+    
+    else:
+        #FIXME: Find a better way to run several wells at a time, multiprocesses ?
+        for well_id in well_ls: 
+            analysis_id = '_'.join([args.loops, args.channels]) 
+            setup.config_logger(os.path.join(args.outdir, 'log'), ("logfile_hrt_bpm_" + analysis_id + ".log"), args.debug)
+            try:
+                main(indir=Path(args.indir), outdir=Path(args.outdir), well_id=well_id, loop=args.loops, channel=args.channels, debug=args.debug, args=args)
+            except Exception:
+                LOGGER.error('Error with well_id {}.'.format(well_id), exc_info=True)
+                pass                

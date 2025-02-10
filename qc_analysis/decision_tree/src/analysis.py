@@ -159,7 +159,7 @@ def write_results(raw_data: pd.DataFrame,
                   limits: dict, 
                   out_dir: Path) -> None:
     
-    results_dir = out_dir / f"qc_analysis_results_training-{raw_data["DATASET"][0]}"
+    results_dir = out_dir / f"qc_analysis_results_training-{raw_data['DATASET'][0]}"
     
     if results_dir.exists():
          print("Results directory already exists. Overwriting.")

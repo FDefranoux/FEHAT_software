@@ -1,3 +1,84 @@
+# Personal Notes 
+
+This software is extracted from https://github.com/birneylab/FEHAT
+Some modifications have been performed to facilitate the use of the software and generalise more easely the use of the software of different cluster plateforms. 
+
+## Modifications 
+
+- [x] Independant script to run multi-folders and handle job submission for SLURM and LSF clusters
+- [x] Independant `medaka_bpm` and `medaka_crop` scripts to be able to run videos individually 
+
+## TODOs
+
+- [ ] Rearrange consolidation of the results 
+- [ ] Clarify use of arguments across functions 
+- [ ] Use multiprocesses if not using arrays
+- [ ] Options to choose to save intermediate results  
+- [ ] Isolate the functions specific to tif and aquifer metadata to make the software runable of any type of videos.  
+
+## Updated test command lines 
+
+### Dispatch jobs crop script
+python dispatch_jobs.py \
+    -i data/test_video/ \
+    -o Test_outputs/ \
+    --crop \
+    --debug
+
+### Dispatch jobs normal heartrate detection
+
+python dispatch_jobs.py \
+    -i data/test_video/ \
+    -o Test_outputs \
+    --debug
+
+### Medaka bpm on its own with array
+python \
+    medaka_bpm.py \
+    --indir data/test_video \
+    --outdir Test_outputs/test_video_medaka_bpm_out_v1.5/test_video \
+    --well_array '[35-37]' \
+    --loops LO001 \
+    --channels CO6 \
+    --debug
+
+### Medaka bpm on its own with well_ids
+python medaka_bpm.py \
+    -i data/test_video/ \
+    -o Test_outputs/ \
+    --well_id WE00037 \
+    --loops LO001 \
+    --channels CO6 \
+    --debug
+
+### Medaka crop on its own with well_id
+python medaka_crop.py \
+    -i data/test_video/ \
+    -o Test_outputs/cropped \
+    --well_id WE00037 \
+    --loops LO001 \
+    --channels CO6 \
+    --debug
+
+### Medaka crop on its own with array
+python medaka_crop.py \
+    -i data/test_video/ \
+    -o Test_outputs/cropped \
+    --well_array '[35-37]' \
+    --loops LO001 \
+    --channels CO6 \
+    --debug
+
+### Consolidation of results
+python src/cluster_consolidate.py \
+        --indir Test_outputs/test_video_medaka_bpm_out_v1.5/test_video/ \
+        --outdir Test_outputs/test_video_medaka_bpm_out_v1.5/test_video/ \
+        --debug 
+
+
+-- 
+
+
 # FEHAT - Fish Embryo Heartbeat Assessment Tool
 
 FEHAT extracts the heart beats per minute from fish embryo videos - fully automated!

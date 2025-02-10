@@ -12,9 +12,11 @@ import logging
 from pathlib import Path
 import pathlib
 import pickle
-
+import glob
 import cv2
 import numpy as np
+import re
+import itertools
 
 from matplotlib import pyplot as plt
 
@@ -39,11 +41,9 @@ def well_video_generator(indir, channels, loops):
 
     # Channel
     for channel in channels:
-        LOGGER.info("### CHANNEL " + channel + " ###")
         channel_videos = [frame for frame in all_frames if channel in frame.name]
         # Loop
         for loop in loops:
-            LOGGER.info("### LOOP " + loop + " ###")
             loop_videos = [frame for frame in channel_videos if loop in frame.name]
 
             # Well
@@ -103,8 +103,7 @@ def load_decision_tree():
 #   0   - greyscale 8 bit
 #   1   - color     8 bit
 def load_video(frame_paths, imread_flag=0, max_frames=np.inf):
-    LOGGER.info("Loading video...")
-
+    LOGGER.debug("Loading video...")
     test_frame = cv2.imread(frame_paths[0], imread_flag)
 
     video = np.empty(shape=(len(frame_paths), *test_frame.shape), dtype=test_frame.dtype)
@@ -123,29 +122,48 @@ def extract_timestamps(sorted_frame_paths):
 
 # Get metadata about the directory that is read in
 # Number of videos and channels and loops present.
-def extract_data(indir):
+def extract_data(indir, channel_ls=[], loop_ls=[], well_range=''):
     # -A001--PO01--LO001--CO1--SL001--PX32500--PW0070--IN0020--TM280--X014600--Y011401--Z214683--T0000000000--WE00001.tif
     LOGGER.info("### Extracting data from image names ###")
+    LOGGER.debug("The input directory is " + str(indir))
 
-    # Grab first frame of all videos
-    tiffs = list(indir.glob('*SL001*.tif')) + \
-            list(indir.glob('*SL001*.tiff'))
-    nr_of_videos = len(tiffs)
+    # Grab first frame of all videos 
+    if well_range != '[1-96]':
+        pattern_well = re.findall('[\d]+', well_range)
+        if len(pattern_well) == 2: pattern_well = list(range(int(pattern_well[0]), int(pattern_well[1]) +1, 1))     
+        well_ls = ['WE000'+ str(w) if len(str(w)) == 2 else 'WE0000' + str(w) for w in pattern_well]
+    else:
+        well_ls = []
+    
+    if len(loop_ls + well_ls + channel_ls) > 0:
+        pattern_ls = ['*'.join(i) for i in itertools.product(loop_ls, channel_ls, ['SL001'], well_ls, ['.tif', '*.tiff'])]
+        LOGGER.debug('Several filtering '  + str(indir / pattern_ls[0]))
+        tiffs = [file for pattern in pattern_ls for file in indir / '/*' + pattern]
+    else:
+        pattern = '*SL001*.[tif tiff]*'
+        LOGGER.debug('No filtering: '  + str(indir / pattern))
+        tiffs = glob.glob(str(indir / pattern))
+        
+    
+    nr_of_videos = len(list(tiffs))
+    LOGGER.debug('No of video found: '  + str(nr_of_videos))
 
-    if not tiffs:
-        raise ValueError("Could not find any tiffs inside " + indir)
+    if (not tiffs) or (nr_of_videos == 0):
+        raise ValueError("Could not find any tiffs inside " + str(indir))
 
     # Extract different channels
     # using a set, gives only unique values
-    channels = {'CO' + tiff.name.split('-CO')[-1][0] for tiff in tiffs}
+    channels = {'CO' + tiff.split('-CO')[-1][0] for tiff in tiffs}
     channels = sorted(list(channels))
 
     # Extract different Loops
     # using a set, gives only unique values
-    loops = {'LO' + tiff.name.split('-LO')[-1][0:3] for tiff in tiffs}
+    loops = {'LO' + tiff.split('-LO')[-1][0:3] for tiff in tiffs}
     loops = sorted(list(loops))
 
-    return nr_of_videos, channels, loops
+    wells = {re.findall('WE0\d{4}', tiff)[0] for tiff in tiffs}
+    wells = sorted(list(wells))   
+    return nr_of_videos, channels, loops, wells
 
 # From Tim-script
 def frameIdx(path):
