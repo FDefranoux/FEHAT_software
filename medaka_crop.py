@@ -131,6 +131,12 @@ if __name__ == '__main__':
                         required=False,
                         type=float)
     
+    parser.add_argument('--crop',
+                        action="store_true",
+                        dest='crop',
+                        help='Crops images, does not analyze BPM',
+                        required=False)
+    
     parser.add_argument('-s', '--embryo_size', 
                         help='radius of embryo in pixels',
                         default=300,
