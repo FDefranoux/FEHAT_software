@@ -85,7 +85,7 @@ def main(indir, channel_ls=[], loop_ls=[], well_range='', mode='', cluster=None,
         bpm_python_cmd = prepare_python_cmd(comb_args, script_python)
         if cluster :
             defaults_cluster_kwargs = dict(script=bpm_python_cmd,
-                                           walltime='2:00:00', 
+                                           walltime='24:00:00', 
                                            jobname="HR_{}_{}".format(comb_args['loops'], comb_args['channels']),
                                            memory=memory_job, 
                                            stdout=os.path.join(outdir, 'log', f"HR_Analysis_{comb_args['loops']}_{comb_args['channels']}.out"),
@@ -115,7 +115,7 @@ def main(indir, channel_ls=[], loop_ls=[], well_range='', mode='', cluster=None,
     if (cluster == True) and (mode != 'crop'):
         # consolidate_python_cmd = prepare_python_cmd(dict(indir= os.path.join(outdir, 'results'), outdir=outdir), os.path.join('src', 'cluster_consolidate.py'))
         consolidate_cluster_kwargs = dict(script=consolidate_python_cmd,
-                                          walltime='2:00:00', 
+                                          walltime='24:00:00', 
                                           jobname=f"HR_Consolidate", 
                                           memory='3000',
                                           stdout=os.path.join(outdir,'consolidate.out'), 
