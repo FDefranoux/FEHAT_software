@@ -86,7 +86,7 @@ def main(indir, channel_ls=[], loop_ls=[], well_range='', mode='', cluster=None,
         if cluster :
             defaults_cluster_kwargs = dict(script=bpm_python_cmd,
                                            walltime='2:00:00', 
-                                           jobname="HR_{}_{}".format(os.path.basename(comb_args['loops'], comb_args['channels'])),
+                                           jobname="HR_{}_{}".format(comb_args['loops'], comb_args['channels']),
                                            memory=memory_job, 
                                            stdout=os.path.join(outdir, 'log', f"HR_Analysis_{comb_args['loops']}_{comb_args['channels']}.out"),
                                            stderr=os.path.join(outdir, 'log', f"HR_Analysis_{comb_args['loops']}_{comb_args['channels']}.out"), 
