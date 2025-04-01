@@ -174,8 +174,6 @@ if __name__ == '__main__':
     args.loops =  list(args.loops)[0]
     args.channels =list(args.channels)[0]
 
-    print(args)
-    LOGGER.debug(args)
     if args.well_id:
         analysis_id = '_'.join([args.well_id, args.loops, args.channels])
         setup.config_logger(os.path.join(args.outdir, 'log'), ("logfile_crop_{}.log".format(analysis_id)), args.debug)
