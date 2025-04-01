@@ -195,15 +195,18 @@ if __name__ == '__main__':
     #Run the jobs according to potential arrays
     if job_index != None:
         well_id = well_ls[job_index -1]
+        analysis_id = '_'.join([well_id, args.loops, args.channels]) 
         setup.config_logger(os.path.join(args.outdir, 'log'), "logfile_crop_{}.log".format(analysis_id), args.debug)
         main(indir=Path(args.indir), outdir=Path(args.outdir), loop=args.loops, channel=args.channels, well_id=well_id, debug=args.debug, args=args)
     
     elif len(well_ls) == 1:
+        analysis_id = '_'.join([well_ls[0], args.loops, args.channels]) 
         setup.config_logger(os.path.join(args.outdir, 'log'), "logfile_crop_{}.log".format(analysis_id), args.debug)
         main(indir=Path(args.indir), outdir=Path(args.outdir), loop=args.loops, channel=args.channels, well_id=well_ls[0], debug=args.debug, args=args)
     else:
         #FIXME: Find a better way to run several wells at a time, multiprocesses ?
         for well_id in well_ls: 
+            analysis_id = '_'.join([args.loops, args.channels]) 
             setup.config_logger(os.path.join(args.outdir, 'log'), "logfile_crop_{}.log".format(analysis_id), args.debug)
             try:
                 main(indir=Path(args.indir), outdir=Path(args.outdir), loop=args.loops, channel=args.channels, well_id=well_id, debug=args.debug, args=args)
