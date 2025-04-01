@@ -121,6 +121,7 @@ def main(indir, channel_ls=[], loop_ls=[], well_range='', mode='', cluster=None,
                                     
     else:
         LOGGER.info("Running on a single machine the {} processes".format(len(python_cmd_ls)))
+        LOGGER.debug(python_cmd_ls[:5])
         # print("Running multifolder mode. Limited console feedback, check logfiles for process status")
         run_processes(python_cmd_ls, max_subprocesses, log=sys.stdout)
         if mode != 'crop':
