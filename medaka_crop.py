@@ -72,7 +72,7 @@ def main(indir, outdir, well_id, loop, channel, args, debug=False):
             embryo_coordinates = cropping.embryo_detection(video8, embryo_size, border_ratio)
             
             # we need every image as 16 bits to crop based on video8 coordinates
-            LOGGER.debug("Loading entire video...")            
+            LOGGER.debug("Loading video {}".format(str(video_metadata['well_id'])))            
             video16 = io_operations.load_video(well_frame_paths, imread_flag=-1)
             LOGGER.debug("Video successfully loaded")
             cropped_video, resulting_dict_from_crop = cropping.crop_2(video16, embryo_size, embryo_coordinates, resulting_dict_from_crop, video_metadata)

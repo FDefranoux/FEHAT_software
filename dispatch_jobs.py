@@ -23,10 +23,10 @@ def main(indir, channel_ls=[], loop_ls=[], well_range='', mode='', cluster=None,
 
     if mode == 'crop':
         script_python = 'medaka_crop.py'
-        memory_job = '12000'
+        memory_job = str(config['DEFAULT']['MEM_CROP'])
     elif mode == 'bpm':
         script_python = 'medaka_bpm.py'
-        memory_job = '8000'
+        memory_job = str(config['DEFAULT']['MEM_BPM'])
         
     #TODO: If both?
     
@@ -138,8 +138,8 @@ def main(indir, channel_ls=[], loop_ls=[], well_range='', mode='', cluster=None,
             conso_out = subprocess.run(consolidate_python_cmd,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             LOGGER.debug('Consolidate command output: ' + str(conso_out.stdout.decode('utf-8')))   
     
-    else: 
-        cropped_files = os.listdir(str(outdir / 'croppedRAWTiff/'))
+    elif (cluster != True) and (mode == 'crop'): 
+        cropped_files = os.listdir(str(outdir + 'croppedRAWTiff/'))
         LOGGER.info("Cropped, no need for consolidation. Here are the number of cropped files: {}".format(len(cropped_files)))
 
 # TODO: Workaround to import run_algorithm into cluster.py. Maybe solve more elegantly
