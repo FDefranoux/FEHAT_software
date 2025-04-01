@@ -40,8 +40,8 @@ config.read(config_path)
 
 ################################## GLOBAL VARIABLES ###########################
 # LOGGER = logging.getLogger(__name__)
-# 
 ################################## ALGORITHM ##################################
+
 def main(indir, outdir, well_id, loop, channel, args, debug=False):
     LOGGER.info("#######################")
     LOGGER.info("Only cropping, script will not run BPM analyses")

@@ -23,8 +23,10 @@ def main(indir, channel_ls=[], loop_ls=[], well_range='', mode='', cluster=None,
 
     if mode == 'crop':
         script_python = 'medaka_crop.py'
+        memory_job = '12000'
     elif mode == 'bpm':
         script_python = 'medaka_bpm.py'
+        memory_job = '8000'
         
     #TODO: If both?
     
@@ -84,8 +86,8 @@ def main(indir, channel_ls=[], loop_ls=[], well_range='', mode='', cluster=None,
         if cluster :
             defaults_cluster_kwargs = dict(script=bpm_python_cmd,
                                            walltime='2:00:00', 
-                                           jobname=f"HR_Analysis_{comb_args['loops']}_{comb_args['channels']}",
-                                           memory='8000', 
+                                           jobname="HR_{}_{}".format(os.path.basename(comb_args['loops'], comb_args['channels'])),
+                                           memory=memory_job, 
                                            stdout=os.path.join(outdir, 'log', f"HR_Analysis_{comb_args['loops']}_{comb_args['channels']}.out"),
                                            stderr=os.path.join(outdir, 'log', f"HR_Analysis_{comb_args['loops']}_{comb_args['channels']}.out"), 
                                            array=well_array)
@@ -99,6 +101,13 @@ def main(indir, channel_ls=[], loop_ls=[], well_range='', mode='', cluster=None,
             # (see function `run_processes(python_cmd_ls, max_subprocesses)`
             python_cmd_ls.append(bpm_python_cmd) 
             LOGGER.debug('Python commands' + str(bpm_python_cmd))
+
+    if (cluster != True):
+        LOGGER.info("Running on a single machine the {} processes".format(len(python_cmd_ls)))
+        LOGGER.debug(python_cmd_ls[:5])
+        # print("Running multifolder mode. Limited console feedback, check logfiles for process status")
+        run_processes(python_cmd_ls, max_subprocesses, log=sys.stdout)
+
 
     ## CONSOLIDATION ##
     #Gather output in the same once every job is finished
@@ -119,7 +128,7 @@ def main(indir, channel_ls=[], loop_ls=[], well_range='', mode='', cluster=None,
         conso_out = subprocess.run(consolidate_cmd,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         LOGGER.debug('Consolidate command output: \n' + str(conso_out.stdout.decode('utf-8')))   
                                     
-    else:
+    elif (cluster != True) and (mode != 'crop'):
         LOGGER.info("Running on a single machine the {} processes".format(len(python_cmd_ls)))
         LOGGER.debug(python_cmd_ls[:5])
         # print("Running multifolder mode. Limited console feedback, check logfiles for process status")
@@ -128,7 +137,10 @@ def main(indir, channel_ls=[], loop_ls=[], well_range='', mode='', cluster=None,
             LOGGER.debug('#Consolidate command' + '\t'.join(consolidate_python_cmd))
             conso_out = subprocess.run(consolidate_python_cmd,  stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             LOGGER.debug('Consolidate command output: ' + str(conso_out.stdout.decode('utf-8')))   
-        
+    
+    else: 
+        cropped_files = os.listdir(str(outdir / 'croppedRAWTiff/'))
+        LOGGER.info("Cropped, no need for consolidation. Here are the number of cropped files: {}".format(len(cropped_files)))
 
 # TODO: Workaround to import run_algorithm into cluster.py. Maybe solve more elegantly
 if __name__ == '__main__':
