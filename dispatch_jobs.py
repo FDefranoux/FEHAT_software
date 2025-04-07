@@ -161,7 +161,7 @@ if __name__ == '__main__':
         if os.path.isfile(os.path.dirname(args.indir)):
             with open(os.path.dirname(args.indir), 'r') as f:
                 dir_list = [line.replace('\n', '') for line in f.readlines()]
-        elif '*' in args.indir:
+        elif '*' in str(args.indir):
             dir_list=glob.glob(str(args.indir))
         else:
             dir_list = []
