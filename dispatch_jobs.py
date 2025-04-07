@@ -159,8 +159,8 @@ if __name__ == '__main__':
     if os.path.isdir(args.indir):
         dir_list = io_operations.detect_experiment_directories(args.indir)
     else:
-        if os.path.isfile(os.path.dirname(str(args.indir))):
-            with open(os.path.dirname(str(args.indir)), 'r') as f:
+        if os.path.isfile(str(args.indir)):
+            with open(str(args.indir), 'r') as f:
                 dir_list = [line.replace('\n', '') for line in f.readlines()]
         elif '*' in str(args.indir):
             dir_list=glob.glob(str(args.indir))
