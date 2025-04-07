@@ -155,11 +155,12 @@ if __name__ == '__main__':
 
     ################# MULTI FOLDER DETECTION ######################
     # handle type of indir argument Detect subfolders in indir
+    print(str(args.indir), args.indir)
     if os.path.isdir(args.indir):
         dir_list = io_operations.detect_experiment_directories(args.indir)
     else:
-        if os.path.isfile(os.path.dirname(args.indir)):
-            with open(os.path.dirname(args.indir), 'r') as f:
+        if os.path.isfile(os.path.dirname(str(args.indir))):
+            with open(os.path.dirname(str(args.indir)), 'r') as f:
                 dir_list = [line.replace('\n', '') for line in f.readlines()]
         elif '*' in str(args.indir):
             dir_list=glob.glob(str(args.indir))
@@ -174,9 +175,9 @@ if __name__ == '__main__':
     job_index = return_jobindex()
     if job_index != None:
         indir = list(nested_dir)[job_index]
-        outdir = os.path.join(args.outdir, os.path.basename(os.path.normpath(indir).replace('/croppedRAWTiff', '')), '')
+        outdir = os.path.join(args.outdir, os.path.basename(os.path.normpath(str(indir)).replace('/croppedRAWTiff', '')), '')
         os.makedirs(outdir, exist_ok=True)
-        os.makedirs(os.path.join(outdir, 'results'), exist_ok=True)
+        os.makedirs(os.path.join(str(outdir), 'results'), exist_ok=True)
         args.outdir = outdir
         args.indir = indir 
         main(indir, channel_ls=args.channels, loop_ls=args.loops, well_range=args.wells, mode=mode, cluster=args.cluster, outdir=outdir, debug=args.debug, args=args)
