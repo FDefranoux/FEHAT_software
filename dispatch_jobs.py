@@ -6,6 +6,7 @@ import src.io_operations as io_operations
 import subprocess
 import logging
 import re
+from pathlib import Path
 
 import configparser
 curr_dir = os.path.dirname(os.path.abspath(__file__))
@@ -170,7 +171,7 @@ if __name__ == '__main__':
 
     nested_dir = []
     for indir in dir_list:
-        nested_dir += list(io_operations.detect_experiment_directories(indir))
+        nested_dir += list(io_operations.detect_experiment_directories(Path(indir)))
     nested_dir = sorted(nested_dir)
     job_index = return_jobindex()
     if job_index != None:
